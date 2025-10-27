@@ -1,3 +1,6 @@
+import tkinter as tk  # для создания диалоговых окон
+from tkinter import filedialog, messagebox  # диалог выбора файла и сообщения об ошибках
+import shutil  # для поиска исполняемых файлов в PATH
 import pytesseract  # для распознавания текста на картинках
 from pdf2image import convert_from_path  # превращает PDF в картинки
 import cv2  # работа с изображениями
@@ -5,10 +8,39 @@ import re  # для поиска чисел по шаблону
 import pandas as pd  # для создания таблиц
 import numpy as np  # работа с массивами чисел
 import os #работа с файлами
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe' #импорт тесеракта
-poppler_path=r"C:\poppler\poppler-25.07.0\Library\bin"  #путь к поплеру
-folder_with_pdfs = r"C:\Users\Pavel\Desktop\Разработка\FirstTask" # папка с PDF файлами
 
+
+def setup_tesseract():
+    """
+    Настраивает Tesseract
+    """
+    tesseract_cmd = shutil.which("tesseract") # Ищем tesseract в системной переменной PATH
+    
+    if tesseract_cmd:
+        # Настраиваем путь к tesseract для pytesseract
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        print(f"✓ Tesseract настроен: {tesseract_cmd}")
+        return True
+    else:
+        print("❌ Tesseract не найден в PATH")
+        print("Установите Tesseract-OCR и добавьте в переменную PATH")
+        return False
+
+def setup_poppler():
+    """
+    Находит путь к Poppler для конвертации PDF в изображения
+    """    
+    # Ищем pdftoppm в системной переменной PATH
+    poppler_cmd = shutil.which("pdftoppm")
+    if poppler_cmd:
+        # Получаем папку, где находится pdftoppm
+        poppler_dir = os.path.dirname(poppler_cmd)
+        print(f"✓ Poppler найден: {poppler_dir}")
+        return poppler_dir
+    else:
+        print("❌ Poppler не найден в PATH")
+        print("Установите Poppler и добавьте папку bin в переменную PATH")
+        return None
 
 # Зоны поиска в которых встречаются номера страницы
 def define_page_zones(width, height):
@@ -77,20 +109,32 @@ def find_page_number(image_path):
             # Проверяем находится ли в нужной зоне
             for zone_name, (x1, y1, x2, y2) in zones.items():
                 if x1 <= x <= x2 and y1 <= y <= y2:
+                    messagebox.showinfo("Результат",f"Найден номер страницы: {clean_text}. В зоне: {zone_name}")
                     print(f"НАЙДЕНО: '{clean_text}' в зоне {zone_name}")
                     return True, clean_text, conf/100
     
-    print("Не найдено")
+    messagebox.showinfo("Результат","Номер страницы на первом листе не обнаружен")
     return False, None, 0
 
 # Преобразование PDF файла в картинку при помощи poppler
 def find_page_number_in_pdf(pdf_path):  
     
     try:
+        # Настраиваем Tesseract для обработки изображений
+        if not setup_tesseract():
+            messagebox.showerror("Ошибка", "Tesseract не найден!\n\nУстановите Tesseract-OCR и добавьте в PATH.")
+            return False, None, 
+        
+        # Настраиваем Poppler для конвертации PDF
+        poppler_path = setup_poppler()
+        if not poppler_path:
+            messagebox.showerror("Ошибка", "Poppler не найден!\n\nУстановите Poppler и добавьте папку bin в PATH.")
+            return False, None, 
+        
         # 1. Превращаем PDF в картинку
         images = convert_from_path(pdf_path, first_page=1, last_page=1, poppler_path= poppler_path)
         if not images:
-            print("Не удалось загрузить страницу из PDF")
+            messagebox.showerror("Ошибка", "Не удалось преобразовать PDF в изображение!")
             return False, None, 
         
         img = cv2.cvtColor(np.array(images[0]), cv2.COLOR_RGB2BGR)
@@ -109,10 +153,29 @@ def find_page_number_in_pdf(pdf_path):
         return result
         
     except Exception as e:
-        print(f" Ошибка: {e}")
+        messagebox.showerror("Ошибка")
         return False, None, 0
    
-   
+
+def Select_PDF_file():
+            # Создаем скрытое окно для диалога выбора файла
+        root = tk.Tk()
+        root.withdraw()  # скрываем главное окно
+        
+        # Показываем диалог выбора PDF файла
+        pdf_path = filedialog.askopenfilename(
+            title="Выберите PDF документ для распознавания",
+            filetypes=[("PDF файлы", "*.pdf")]
+        )
+        
+        # Проверяем, выбрал ли пользователь файл
+        if not pdf_path:
+            messagebox.showerror("Ошибка", "PDF файл не выбран")
+            return False
+        find_page_number_in_pdf(pdf_path)
+ 
    #Для теста работы пока ссылка
-result = find_page_number_in_pdf(r"C:\Users\Pavel\Desktop\Разработка\FirstTask\testpdf3.pdf") #ссылка на PDF файл
-print(result)
+   
+Select_PDF_file()
+# result = find_page_number_in_pdf(r"C:\Users\Pavel\Desktop\Dev\FirstTask\testpdf1.pdf") #ссылка на PDF файл
+# print(result)
